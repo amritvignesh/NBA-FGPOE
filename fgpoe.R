@@ -6,6 +6,12 @@ library(hoopR)
 library(gt)
 library(ggplot2)
 library(ggrepel)
+library(png)
+library(ggimage)
+library(ggpath)
+library(vip)
+library(ggpmisc)
+library(gtExtras)
 
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 10)
 
@@ -121,6 +127,7 @@ threshold <- 0.5 * max(stats_2024$games)
 
 stats_2024 <- stats_2024 %>%
   filter(games >= threshold) %>%
+  filter(fg_ppg >= 15.0) %>%
   mutate(fgpoe = fg_ppg - pred_fg_ppg)
 
 ids <- unique(stats_2024$idPlayer)
@@ -130,14 +137,85 @@ for(id in ids) {
 
 stats_2024 %>%
   ggplot(aes(x = fg_ppg, y = pred_fg_ppg)) +
-  geom_hline(yintercept = mean(stats_2023$pred_fg_ppg), color = "red", linetype = "dashed", alpha = 0.5) +
-  geom_vline(xintercept = mean(stats_2023$fg_ppg), color = "red", linetype = "dashed", alpha = 0.5) +
-  geom_image(image = lebron_headshot, aes(x = 0.5, y = 0.5), size = 0.5) +
+  geom_hline(yintercept = mean(stats_2024$pred_fg_ppg), color = "red", linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = mean(stats_2024$fg_ppg), color = "red", linetype = "dashed", alpha = 0.5) +
+  geom_from_path(aes(x = fg_ppg, y = pred_fg_ppg, path = headshot_link), width = 0.1, height = 0.1) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq", "R2"))) +
   labs(x = "Average Field Goal PPG",
        y = "Average Predicted Field Goal PPG",
-       title = "Predicting Field Goal PPG and Quantifying FGPOE",
+       title = "Predicting Field Goal PPG and Quantifying FGPOE (Players With 15+ FG PPG)",
        caption = "Amrit Vignesh") + 
   theme_bw() +
   theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold")) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 20)) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 20))
+
+gtdata <- stats_2024 %>%
+  ungroup() %>%
+  mutate(fg_ppg = round(fg_ppg, 2)) %>%
+  mutate(pred_fg_ppg = round(pred_fg_ppg, 2)) %>%
+  mutate(fgpoe = round(fgpoe, 2)) %>%
+  select(player, fg_ppg, pred_fg_ppg, fgpoe) 
+
+table1 <- gtdata %>%
+  arrange(-fgpoe) %>%
+  filter(row_number() <= 10) %>%
+  ungroup()
+
+table2 <- gtdata %>%
+  arrange(fgpoe) %>%
+  filter(row_number() <= 10) %>%
+  ungroup()
+
+t1 <- table1 %>% gt() %>% 
+  cols_align(
+    align = "center",
+    columns = c(player, fg_ppg, pred_fg_ppg, fgpoe)
+  ) %>%
+  data_color(
+    columns = fgpoe,
+    colors = scales::col_numeric(
+      palette = paletteer::paletteer_d(
+        palette = "ggsci::blue_material"
+      ) %>% as.character(),
+      domain = NULL
+    )
+  ) %>%
+  cols_label(
+    player = md("**Player**"),
+    fg_ppg = md("**FG PPG**"),
+    pred_fg_ppg = md("**Pred. FG PPG**"),
+    fgpoe = md("**FGPOE**"),
+  ) %>%
+  tab_header(
+    title = md("**2023-24 NBA FGPOE (Field Goal Points Per Game Over Expected) Up Till 11/27 Games**"),
+    subtitle = "Trained Data From 2020-21 to 2022-23 Season"
+  ) 
+
+t2 <- table2 %>% gt() %>% 
+  cols_align(
+    align = "center",
+    columns = c(player, fg_ppg, pred_fg_ppg, fgpoe)
+  ) %>%
+  data_color(
+    columns = fgpoe,
+    colors = scales::col_numeric(
+      palette = paletteer::paletteer_d(
+        palette = "ggsci::blue_material"
+      ) %>% as.character(),
+      domain = NULL,
+      reverse = TRUE
+    )
+  ) %>%
+  cols_label(
+    player = md("**Player**"),
+    fg_ppg = md("**FG PPG**"),
+    pred_fg_ppg = md("**Pred. FG PPG**"),
+    fgpoe = md("**FGPOE**"),
+  ) %>%
+  tab_header(
+    title = md("**2023-24 NBA FGPOE (Field Goal Points Per Game Over Expected) Up Till 11/27 Games**"),
+    subtitle = "Trained Data From 2020-21 to 2022-23 Season"
+  ) 
+
